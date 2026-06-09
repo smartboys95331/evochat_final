@@ -17,7 +17,6 @@ class MeshService {
         client.listen((data) {
           try {
             String decrypted = EncryptionService.decryptText(utf8.decode(data));
-            // Format: "senderId|message"
             var parts = decrypted.split('|');
             if (parts.length >= 2) {
               callback(parts[0], parts[1]);
@@ -56,15 +55,14 @@ class MeshService {
       
       List<BonsoirService> foundPeers = [];
       
-      // FIXED: Removed () from eventStream
-      discovery.eventStream.listen((event) {
-        if (event.type == BonsoirDiscoveryEvent.serviceFound) {
+      // FIXED: Added ?. to handle null safety
+      discovery.eventStream?.listen((event) {
+        if (event.type == BonsoirDiscoveryEvent.serviceFound && event.service != null) {
           foundPeers.add(event.service!);
         }
       });
 
       await discovery.start();
-      // Scan for 5 seconds to find people
       await Future.delayed(Duration(seconds: 5));
       await discovery.stop();
       
