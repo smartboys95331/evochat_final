@@ -1,10 +1,24 @@
 workflows:
   evochat-build:
     name: EvoChat Build
-    scripts:
-      - name: Fix Missing Folders
-        script: flutter create .
-      - name: Build Android APK
-        script: flutter build apk --release
-      - name: Build Windows EXE
-        script: flutter build windows
+    max_duration: 60
+    pipelines:
+      - pipeline:
+          name: android_windows_build
+          platforms:
+            - android
+            - windows
+          scripts:
+            - name: Fix Missing Folders
+              script: |
+                flutter create .
+            - name: Fix JVM Version Mismatch
+              script: |
+                sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' android/app/build.gradle || true
+                sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' android/app/build.gradle || true
+            - name: Build Android APK
+              script: |
+                flutter build apk --release
+            - name: Build Windows EXE
+              script: |
+                flutter build windows
