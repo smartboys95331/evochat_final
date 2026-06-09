@@ -4,26 +4,26 @@ workflows:
     scripts:
       - name: Fix Missing Folders
         script: flutter create .
-      - name: Force Global JVM 17
+      - name: Absolute JVM Force
         script: |
-          # This block forces both Java and Kotlin to use JVM 17 across ALL modules and plugins
-          cat <<EOF >> android/build.gradle
+          # 1. Force Gradle to use Java 17 for everything
+          echo "org.gradle.java.home=/usr/lib/jvm/java-17-openjdk-amd64" >> android/gradle.properties
           
-          subprojects {
-              tasks.withType(JavaCompile) {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
-              }
+          # 2. Force every single subproject to use JVM 17 for both Java and Kotlin
+          cat <<EOF >> android/build.gradle
+
+          allprojects {
               tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
                   kotlinOptions {
                       jvmTarget = "17"
                   }
               }
+              tasks.withType(JavaCompile) {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
           }
           EOF
-          # Also fix the app-level settings just in case
-          sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' android/app/build.gradle || true
-          sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' android/app/build.gradle || true
       - name: Build Android APK
         script: flutter build apk --release
       - name: Build Windows EXE
