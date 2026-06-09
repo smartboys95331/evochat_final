@@ -1,0 +1,20 @@
+name: evochat
+description: A Professional P2P Resilient Messenger.
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  bonsoir: ^2.1.1
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  encrypt: ^5.0.3
+  uuid: ^4.2.2
+  intl: ^0.19.0
+  cupertino_icons: ^1.0.6
+
+flutter:
+  uses-material-design: true
