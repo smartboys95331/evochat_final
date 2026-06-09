@@ -9,37 +9,73 @@ class MeshService {
   BonsoirBroadcast? _broadcast;
   ServerSocket? _server;
   
+  // 1. Start Server to LISTEN for messages from other phones
   Future<void> startListening(String myId, Function(String, String) callback) async {
-    _server = await ServerSocket.bind(InternetAddress.anyIPv4, 4545);
-    _server!.listen((Socket client) {
-      client.listen((data) {
-        String decrypted = EncryptionService.decryptText(utf8.decode(data));
-        var parts = decrypted.split('|');
-        callback(parts[0], parts[1]);
+    try {
+      _server = await ServerSocket.bind(InternetAddress.anyIPv4, 4545);
+      _server!.listen((Socket client) {
+        client.listen((data) {
+          try {
+            String decrypted = EncryptionService.decryptText(utf8.decode(data));
+            // Format: "senderId|message"
+            var parts = decrypted.split('|');
+            if (parts.length >= 2) {
+              callback(parts[0], parts[1]);
+            }
+          } catch (e) {
+            print("Decryption error: $e");
+          }
+        });
       });
-    });
+    } catch (e) {
+      print("Server bind error: $e");
+    }
   }
 
+  // 2. Broadcast your presence so others can find you offline
   Future<void> startBroadcasting(String userName) async {
-    _service = BonsoirService(name: userName, type: '_meshchat._tcp', port: 4545);
-    _broadcast = BonsoirBroadcast(service: _service!);
-    await _broadcast!.ready();
-    await _broadcast!.start();
+    try {
+      _service = BonsoirService(
+        name: userName, 
+        type: '_meshchat._tcp', 
+        port: 4545,
+      );
+      _broadcast = BonsoirBroadcast(service: _service!);
+      await _broadcast!.ready();
+      await _broadcast!.start();
+    } catch (e) {
+      print("Broadcasting error: $e");
+    }
   }
 
+  // 3. Scan for other users in the room
   Future<List<BonsoirService>> discoverPeers() async {
-    BonsoirDiscovery discovery = BonsoirDiscovery(type: '_meshchat._tcp');
-    await discovery.ready();
-    List<BonsoirService> foundPeers = [];
-    discovery.eventStream().listen((event) {
-      if (event.type == BonsoirDiscoveryEvent.serviceFound) foundPeers.add(event.service!);
-    });
-    await discovery.start();
-    await Future.delayed(Duration(seconds: 5));
-    await discovery.stop();
-    return foundPeers;
+    try {
+      BonsoirDiscovery discovery = BonsoirDiscovery(type: '_meshchat._tcp');
+      await discovery.ready();
+      
+      List<BonsoirService> foundPeers = [];
+      
+      // FIXED: Removed () from eventStream
+      discovery.eventStream.listen((event) {
+        if (event.type == BonsoirDiscoveryEvent.serviceFound) {
+          foundPeers.add(event.service!);
+        }
+      });
+
+      await discovery.start();
+      // Scan for 5 seconds to find people
+      await Future.delayed(Duration(seconds: 5));
+      await discovery.stop();
+      
+      return foundPeers;
+    } catch (e) {
+      print("Discovery error: $e");
+      return [];
+    }
   }
 
+  // 4. Send an encrypted message directly to another phone
   Future<void> sendMessage(String ip, String myId, String text) async {
     try {
       Socket socket = await Socket.connect(ip, 4545, timeout: Duration(seconds: 5));
