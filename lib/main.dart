@@ -86,7 +86,8 @@ class _HomeScreenState extends State<HomeScreen> {
               itemBuilder: (c, i) => ListTile(
                 leading: CircleAvatar(child: Text(_peers[i].name[0])),
                 title: Text(_peers[i].name),
-                subtitle: Text(_peers[i].host),
+                // FIXED: Changed .host to .hostName (most common in new version)
+                subtitle: Text(_peers[i].hostName), 
                 onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => ChatRoom(myId: widget.userId, peer: _peers[i], db: _db, mesh: _mesh))),
               ),
             ),
@@ -145,7 +146,8 @@ class _ChatRoomState extends State<ChatRoom> {
               children: [
                 Expanded(child: TextField(controller: _msgController)),
                 IconButton(icon: Icon(Icons.send), onPressed: () async {
-                  await widget.mesh.sendMessage(widget.peer.host, widget.myId, _msgController.text);
+                  // FIXED: Changed .host to .hostName
+                  await widget.mesh.sendMessage(widget.peer.hostName, widget.myId, _msgController.text);
                   await widget.db.saveMessage(Message(id: Uuid().v4(), senderId: widget.myId, receiverId: widget.peer.name, text: _msgController.text, timestamp: DateTime.now(), isFromMe: true));
                   _msgController.clear();
                   setState(() {});
