@@ -1,20 +1,10 @@
 workflows:
-  default-workflow:
-    name: Default Workflow
-    max_duration: 60
-    pipelines:
-      - pipeline:
-          name: android_windows_build
-          platforms:
-            - android
-            - windows
-          scripts:
-            - name: Fix Missing Folders
-              script: |
-                flutter create .
-            - name: Build Android APK
-              script: |
-                flutter build apk --release
-            - name: Build Windows EXE
-              script: |
-                flutter build windows
+  evochat-build:
+    name: EvoChat Build
+    scripts:
+      - name: Fix Missing Folders
+        script: flutter create .
+      - name: Build Android APK
+        script: flutter build apk --release
+      - name: Build Windows EXE
+        script: flutter build windows
