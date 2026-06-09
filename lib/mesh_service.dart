@@ -9,7 +9,6 @@ class MeshService {
   BonsoirBroadcast? _broadcast;
   ServerSocket? _server;
   
-  // 1. Start Server to LISTEN for messages from other phones
   Future<void> startListening(String myId, Function(String, String) callback) async {
     try {
       _server = await ServerSocket.bind(InternetAddress.anyIPv4, 4545);
@@ -31,7 +30,6 @@ class MeshService {
     }
   }
 
-  // 2. Broadcast your presence so others can find you offline
   Future<void> startBroadcasting(String userName) async {
     try {
       _service = BonsoirService(
@@ -40,24 +38,20 @@ class MeshService {
         port: 4545,
       );
       _broadcast = BonsoirBroadcast(service: _service!);
-      await _broadcast!.ready();
       await _broadcast!.start();
     } catch (e) {
       print("Broadcasting error: $e");
     }
   }
 
-  // 3. Scan for other users in the room
   Future<List<BonsoirService>> discoverPeers() async {
     try {
       BonsoirDiscovery discovery = BonsoirDiscovery(type: '_meshchat._tcp');
-      await discovery.ready();
-      
       List<BonsoirService> foundPeers = [];
       
-      // FIXED: Added ?. to handle null safety
       discovery.eventStream?.listen((event) {
-        if (event.type == BonsoirDiscoveryEvent.serviceFound && event.service != null) {
+        // VERSION-PROOF: We just check if a service was found regardless of the event name
+        if (event.service != null) {
           foundPeers.add(event.service!);
         }
       });
@@ -73,7 +67,6 @@ class MeshService {
     }
   }
 
-  // 4. Send an encrypted message directly to another phone
   Future<void> sendMessage(String ip, String myId, String text) async {
     try {
       Socket socket = await Socket.connect(ip, 4545, timeout: Duration(seconds: 5));
