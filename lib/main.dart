@@ -1,144 +1,86 @@
-import 'package:flutter/material.dart';
-import 'package:uuid/uuid.dart';
+import 'dart:io';
+import 'dart:convert';
+import 'package:bonsoir/bonsoir.dart';
+import 'encryption_service.dart';
 import 'models.dart';
-import 'mesh_service.dart';
-import 'database_service.dart';
 
-void main() => runApp(MaterialApp(home: UserSetupScreen(), theme: ThemeData.dark()));
-
-class UserSetupScreen extends StatelessWidget {
-  final TextEditingController _nameController = TextEditingController();
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: EdgeInsets.all(30),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text("Create Your Identity", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              TextField(controller: _nameController, decoration: InputDecoration(labelText: "Enter Name")),
-              SizedBox(height: 20),
-              ElevatedButton(onPressed: () {
-                String id = Uuid().v4();
-                Navigator.push(context, MaterialPageRoute(builder: (c) => HomeScreen(userId: id, userName: _nameController.text)));
-              }, child: Text("Start Messaging"))
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class HomeScreen extends StatefulWidget {
-  final String userId;
-  final String userName;
-  HomeScreen({required this.userId, required this.userName});
-  @override
-  _HomeScreenState createState() => _HomeScreenState();
-}
-
-class _HomeScreenState extends State<HomeScreen> {
-  MeshService _mesh = MeshService();
-  DatabaseService _db = DatabaseService();
-  List<BonsoirService> _peers = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _mesh.startBroadcasting(widget.userName);
-    _mesh.startListening(widget.userId, (senderId, text) {
-      _db.saveMessage(Message(id: Uuid().v4(), senderId: senderId, receiverId: widget.userId, text: text, timestamp: DateTime.now(), isFromMe: false));
-      setState(() {});
-    });
+class MeshService {
+  BonsoirService? _service;
+  BonsoirBroadcast? _broadcast;
+  ServerSocket? _server;
+  
+  Future<void> startListening(String myId, Function(String, String) callback) async {
+    try {
+      _server = await ServerSocket.bind(InternetAddress.anyIPv4, 4545);
+      _server!.listen((Socket client) {
+        client.listen((data) {
+          try {
+            String decrypted = EncryptionService.decryptText(utf8.decode(data));
+            var parts = decrypted.split('|');
+            if (parts.length >= 2) {
+              callback(parts[0], parts[1]);
+            }
+          } catch (e) {
+            print("Decryption error: $e");
+          }
+        });
+      });
+    } catch (e) {
+      print("Server bind error: $e");
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text("Freedom Chat: ${widget.userName}")),
-      body: Column(
-        children: [
-          ElevatedButton(onPressed: () async {
-            var found = await _mesh.discoverPeers();
-            setState(() => _peers = found);
-          }, child: Text("Scan for Nearby People")),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _peers.length,
-              itemBuilder: (c, i) => ListTile(
-                title: Text(_peers[i].name),
-                subtitle: Text(_peers[i].host),
-                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => ChatRoom(myId: widget.userId, peer: _peers[i], db: _db, mesh: _mesh))),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> startBroadcasting(String userName) async {
+    try {
+      _service = BonsoirService(
+        name: userName, 
+        type: '_meshchat._tcp', 
+        port: 4545,
+      );
+      _broadcast = BonsoirBroadcast(service: _service!);
+      // FIXED: Removed .ready() as it's no longer needed in new version
+      await _broadcast!.start();
+    } catch (e) {
+      print("Broadcasting error: $e");
+    }
   }
-}
 
-class ChatRoom extends StatefulWidget {
-  final String myId;
-  final BonsoirService peer;
-  final DatabaseService db;
-  final MeshService mesh;
-  ChatRoom({required this.myId, required this.peer, required this.db, required this.mesh});
-  @override
-  _ChatRoomState createState() => _ChatRoomState();
-}
+  Future<List<BonsoirService>> discoverPeers() async {
+    try {
+      BonsoirDiscovery discovery = BonsoirDiscovery(type: '_meshchat._tcp');
+      // FIXED: Removed .ready() as it's no longer needed in new version
+      
+      List<BonsoirService> foundPeers = [];
+      
+      discovery.eventStream?.listen((event) {
+        // FIXED: Simplified the event check to be version-proof
+        if (event.type == BonsoirDiscoveryEvent.serviceFound) {
+          if (event.service != null) {
+            foundPeers.add(event.service!);
+          }
+        }
+      });
 
-class _ChatRoomState extends State<ChatRoom> {
-  final TextEditingController _msgController = TextEditingController();
+      await discovery.start();
+      await Future.delayed(Duration(seconds: 5));
+      await discovery.stop();
+      
+      return foundPeers;
+    } catch (e) {
+      print("Discovery error: $e");
+      return [];
+    }
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.peer.name)),
-      body: Column(
-        children: [
-          Expanded(
-            child: FutureBuilder<List<Message>>(
-              future: widget.db.getMessages(widget.peer.name, widget.myId),
-              builder: (c, snap) {
-                if (!snap.hasData) return Center(child: CircularProgressIndicator());
-                return ListView.builder(
-                  itemCount: snap.data!.length,
-                  itemBuilder: (c, i) {
-                    var m = snap.data![i];
-                    return Align(
-                      alignment: m.isFromMe ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        padding: EdgeInsets.all(10),
-                        margin: EdgeInsets.all(5),
-                        decoration: BoxDecoration(color: m.isFromMe ? Colors.deepPurple : Colors.grey, borderRadius: BorderRadius.circular(10)),
-                        child: Text(m.text),
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.all(10),
-            child: Row(
-              children: [
-                Expanded(child: TextField(controller: _msgController)),
-                IconButton(icon: Icon(Icons.send), onPressed: () async {
-                  await widget.mesh.sendMessage(widget.peer.host, widget.myId, _msgController.text);
-                  await widget.db.saveMessage(Message(id: Uuid().v4(), senderId: widget.myId, receiverId: widget.peer.name, text: _msgController.text, timestamp: DateTime.now(), isFromMe: true));
-                  _msgController.clear();
-                  setState(() {});
-                })
-              ],
-            ),
-          )
-        ],
-      ),
-    );
+  Future<void> sendMessage(String ip, String myId, String text) async {
+    try {
+      Socket socket = await Socket.connect(ip, 4545, timeout: Duration(seconds: 5));
+      String encrypted = EncryptionService.encryptText("$myId|$text");
+      socket.write(utf8.encode(encrypted));
+      await socket.flush();
+      await socket.close();
+    } catch (e) {
+      print("Send Error: $e");
+    }
   }
 }
