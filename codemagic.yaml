@@ -4,8 +4,11 @@ workflows:
     scripts:
       - name: Fix Missing Folders
         script: flutter create .
-      - name: Fix JVM Version Mismatch
+      - name: Global JVM Force Fix
         script: |
+          # Force all modules (including plugins like bonsoir) to use JVM 17
+          echo "subprojects { tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach { kotlinOptions { jvmTarget = '17' } } }" >> android/build.gradle
+          # Also fix the app-level settings
           sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' android/app/build.gradle || true
           sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' android/app/build.gradle || true
       - name: Build Android APK
